@@ -265,3 +265,92 @@ class ETZConfigSnapshot(BaseModel):
     max_snapshots_per_institution: int
     default_windows: Tuple[int, ...]
 
+
+# -----------------------------------------------------------------------------
+# Serialization helpers
+# -----------------------------------------------------------------------------
+
+
+def etz_datetime_to_str(dt: datetime) -> str:
+    """Serialize datetime to ISO8601 Z string."""
+
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=ETZ_TIMEZONE)
+    return dt.astimezone(ETZ_TIMEZONE).isoformat().replace("+00:00", "Z")
+
+
+def etz_model_to_dict(model: BaseModel) -> Dict[str, Any]:
+    """Serialize a Pydantic model to a JSON-friendly dict."""
+
+    data = model.dict()
+    for key, value in list(data.items()):
+        if isinstance(value, datetime):
+            data[key] = etz_datetime_to_str(value)
+        elif isinstance(value, Enum):
+            data[key] = value.value
+    return data
+
+
+def etz_export_state(
+    institutions: Dict[str, ETZInstitution],
+    snapshots: Dict[str, List[ETZSnapshot]],
+) -> Dict[str, Any]:
+    """Export the full in-memory state to a JSON-serializable dict."""
+
+    inst_list = [etz_model_to_dict(inst) for inst in institutions.values()]
+    snap_list: List[Dict[str, Any]] = []
+    for inst_id, series in snapshots.items():
+        for snap in series:
+            item = etz_model_to_dict(snap)
+            item["institution_id"] = inst_id
+            snap_list.append(item)
+    return {"institutions": inst_list, "snapshots": snap_list}
+
+
+def etz_import_state(payload: Dict[str, Any]) -> Tuple[
+    Dict[str, ETZInstitution], Dict[str, List[ETZSnapshot]]
+]:
+    """Import state from JSON payload produced by etz_export_state."""
+
+    insts: Dict[str, ETZInstitution] = {}
+    snaps: Dict[str, List[ETZSnapshot]] = {}
+
+    for inst_data in payload.get("institutions", []):
+        inst = ETZInstitution(**inst_data)
+        insts[inst.id] = inst
+
+    for snap_data in payload.get("snapshots", []):
+        inst_id = snap_data.get("institution_id")
+        if not inst_id:
+            continue
+        snap = ETZSnapshot(**snap_data)
+        snaps.setdefault(inst_id, []).append(snap)
+
+    # Ensure snapshots lists are sorted by captured_at
+    for inst_id, series in snaps.items():
+        series.sort(key=lambda s: s.captured_at)
+
+    return insts, snaps
+
+
+# -----------------------------------------------------------------------------
+# In-memory store
+# -----------------------------------------------------------------------------
+
+
+@dataclass
+class ETZStore:
+    """In-memory repository for institutions and snapshots."""
+
+    institutions: Dict[str, ETZInstitution]
+    snapshots: Dict[str, List[ETZSnapshot]]
+
+    def __init__(self) -> None:
+        self.institutions = {}
+        self.snapshots = {}
+
+    # -- Institution operations -------------------------------------------------
+
+    def create_institution(self, inst: ETZInstitution) -> ETZInstitution:
+        if inst.id in self.institutions:
+            raise ValueError(f"Institution {inst.id} already exists")
