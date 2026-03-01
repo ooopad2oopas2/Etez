@@ -354,3 +354,92 @@ class ETZStore:
     def create_institution(self, inst: ETZInstitution) -> ETZInstitution:
         if inst.id in self.institutions:
             raise ValueError(f"Institution {inst.id} already exists")
+        now = datetime.now(ETZ_TIMEZONE)
+        inst.created_at = now
+        inst.updated_at = now
+        self.institutions[inst.id] = inst
+        self.snapshots.setdefault(inst.id, [])
+        return inst
+
+    def get_institution(self, inst_id: str) -> ETZInstitution:
+        try:
+            return self.institutions[inst_id]
+        except KeyError:
+            raise KeyError(f"Institution {inst_id} not found")
+
+    def list_institutions(self, active_only: bool = True) -> List[ETZInstitution]:
+        values = list(self.institutions.values())
+        if active_only:
+            values = [i for i in values if i.is_active]
+        values.sort(key=lambda i: (i.region.value, i.short_name))
+        return values
+
+    def deactivate_institution(self, inst_id: str) -> ETZInstitution:
+        inst = self.get_institution(inst_id)
+        if not inst.is_active:
+            return inst
+        inst.is_active = False
+        inst.updated_at = datetime.now(ETZ_TIMEZONE)
+        self.institutions[inst_id] = inst
+        return inst
+
+    # -- Snapshot operations ----------------------------------------------------
+
+    def add_snapshot(self, snapshot: ETZSnapshot) -> ETZSnapshot:
+        if snapshot.institution_id not in self.institutions:
+            raise KeyError(f"Institution {snapshot.institution_id} not found")
+        series = self.snapshots.setdefault(snapshot.institution_id, [])
+        if len(series) >= ETZ_MAX_SNAPSHOTS_PER_INSTITUTION:
+            series.pop(0)
+        series.append(snapshot)
+        series.sort(key=lambda s: s.captured_at)
+        return snapshot
+
+    def list_snapshots(
+        self,
+        inst_id: str,
+        start: Optional[datetime] = None,
+        end: Optional[datetime] = None,
+    ) -> List[ETZSnapshot]:
+        if inst_id not in self.snapshots:
+            return []
+        series = self.snapshots[inst_id]
+        if start is None and end is None:
+            return list(series)
+        out: List[ETZSnapshot] = []
+        for s in series:
+            if start is not None and s.captured_at < start:
+                continue
+            if end is not None and s.captured_at > end:
+                continue
+            out.append(s)
+        return out
+
+    # -- Aggregation helpers ----------------------------------------------------
+
+    def aggregate_for_windows(
+        self,
+        inst_id: str,
+        windows_minutes: Iterable[int],
+        now: Optional[datetime] = None,
+    ) -> List[ETZAggregateWindow]:
+        if now is None:
+            now = datetime.now(ETZ_TIMEZONE)
+        series = self.list_snapshots(inst_id)
+        results: List[ETZAggregateWindow] = []
+        for minutes in windows_minutes:
+            window_start = now - timedelta(minutes=minutes)
+            subset = [s for s in series if s.captured_at >= window_start]
+            if not subset:
+                results.append(
+                    ETZAggregateWindow(
+                        window_minutes=minutes,
+                        start=window_start,
+                        end=now,
+                        count=0,
+                        exposure_avg=0.0,
+                        exposure_max=0.0,
+                        net_notional_avg=0.0,
+                        pnl_sum=0.0,
+                        liquidity_min=0.0,
+                        leverage_max=0.0,
