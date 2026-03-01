@@ -443,3 +443,92 @@ class ETZStore:
                         pnl_sum=0.0,
                         liquidity_min=0.0,
                         leverage_max=0.0,
+                        risk_score_avg=0.0,
+                    )
+                )
+                continue
+
+            count = len(subset)
+            exposure_sum = sum(s.exposure_notional for s in subset)
+            exposure_max = max(s.exposure_notional for s in subset)
+            net_sum = sum(s.net_notional for s in subset)
+            pnl_sum = sum(s.daily_pnl for s in subset)
+            liquidity_min = min(s.liquidity_ratio for s in subset)
+            leverage_max = max(s.leverage_ratio for s in subset)
+
+            # risk score can be overridden per snapshot; if not, use institution score
+            inst = self.institutions.get(inst_id)
+            base_score = inst.risk_score if inst else 0
+            risk_scores: List[int] = []
+            for s in subset:
+                if s.risk_score_override is not None:
+                    risk_scores.append(s.risk_score_override)
+                else:
+                    risk_scores.append(base_score)
+            risk_score_avg = sum(risk_scores) / float(len(risk_scores))
+
+            results.append(
+                ETZAggregateWindow(
+                    window_minutes=minutes,
+                    start=window_start,
+                    end=now,
+                    count=count,
+                    exposure_avg=exposure_sum / float(count),
+                    exposure_max=exposure_max,
+                    net_notional_avg=net_sum / float(count),
+                    pnl_sum=pnl_sum,
+                    liquidity_min=liquidity_min,
+                    leverage_max=leverage_max,
+                    risk_score_avg=risk_score_avg,
+                )
+            )
+
+        return results
+
+    # -- Summary helpers --------------------------------------------------------
+
+    def total_snapshot_count(self) -> int:
+        return sum(len(v) for v in self.snapshots.values())
+
+    def export_state(self) -> Dict[str, Any]:
+        return etz_export_state(self.institutions, self.snapshots)
+
+    def import_state(self, payload: Dict[str, Any]) -> None:
+        insts, snaps = etz_import_state(payload)
+        self.institutions = insts
+        self.snapshots = snaps
+
+
+# Global store instance used by both FastAPI and CLI.
+ETZ_STORE = ETZStore()
+
+
+# -----------------------------------------------------------------------------
+# FastAPI application and dependencies
+# -----------------------------------------------------------------------------
+
+
+def get_etz_store() -> ETZStore:
+    return ETZ_STORE
+
+
+ETZ_APP = FastAPI(
+    title=ETZ_APP_NAME,
+    version=ETZ_APP_VERSION,
+    description="Institutional trend tracking backend inspired by Elona-style contracts.",
+)
+
+
+@ETZ_APP.get("/health", response_model=ETZHealthStatus)
+def etz_health(store: ETZStore = Depends(get_etz_store)) -> ETZHealthStatus:
+    return ETZHealthStatus(
+        status="ok",
+        app_name=ETZ_APP_NAME,
+        version=ETZ_APP_VERSION,
+        now=datetime.now(ETZ_TIMEZONE),
+        institution_count=len(store.institutions),
+        snapshot_count=store.total_snapshot_count(),
+    )
+
+
+@ETZ_APP.get("/config", response_model=ETZConfigSnapshot)
