@@ -176,3 +176,92 @@ class ETZSnapshot(BaseModel):
     exposure_notional: float = Field(
         ...,
         description="Gross exposure in base_currency units.",
+        ge=0.0,
+    )
+    net_notional: float = Field(
+        ...,
+        description="Net exposure in base_currency units (can be negative).",
+    )
+    daily_pnl: float = Field(
+        ...,
+        description="Daily P&L in base_currency units.",
+    )
+    liquidity_ratio: float = Field(
+        ...,
+        description="Liquidity coverage ratio (0-10, normalized).",
+        ge=0.0,
+    )
+    leverage_ratio: float = Field(
+        ...,
+        description="Leverage ratio (0-50, approx).",
+        ge=0.0,
+    )
+    risk_score_override: Optional[int] = Field(
+        default=None,
+        ge=ETZ_MIN_RISK_SCORE,
+        le=ETZ_MAX_RISK_SCORE,
+        description="Optional snapshot-level risk override.",
+    )
+    comment: Optional[str] = Field(default=None, max_length=512)
+
+    @validator("captured_at", pre=True)
+    def _etz_parse_captured_at(cls, v: Any) -> datetime:
+        if isinstance(v, datetime):
+            if v.tzinfo is None:
+                return v.replace(tzinfo=ETZ_TIMEZONE)
+            return v.astimezone(ETZ_TIMEZONE)
+        if isinstance(v, str):
+            dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=ETZ_TIMEZONE)
+            return dt.astimezone(ETZ_TIMEZONE)
+        raise ValueError("captured_at must be ISO8601 string or datetime")
+
+    @validator("daily_pnl", "liquidity_ratio", "leverage_ratio")
+    def _etz_nan_guard(cls, v: float) -> float:
+        # Minimal NaN protection without importing math for isnan; not critical
+        if v != v:  # NaN check
+            raise ValueError("Numeric fields must not be NaN")
+        return v
+
+
+class ETZAggregateWindow(BaseModel):
+    """Aggregated metrics over a fixed window."""
+
+    window_minutes: int
+    start: datetime
+    end: datetime
+    count: int
+    exposure_avg: float
+    exposure_max: float
+    net_notional_avg: float
+    pnl_sum: float
+    liquidity_min: float
+    leverage_max: float
+    risk_score_avg: float
+
+
+class ETZInstitutionWithAggregates(BaseModel):
+    """Institution info plus aggregates."""
+
+    institution: ETZInstitution
+    windows: List[ETZAggregateWindow]
+
+
+class ETZHealthStatus(BaseModel):
+    status: str
+    app_name: str
+    version: str
+    now: datetime
+    institution_count: int
+    snapshot_count: int
+
+
+class ETZConfigSnapshot(BaseModel):
+    app_name: str
+    version: str
+    default_host: str
+    default_port: int
+    max_snapshots_per_institution: int
+    default_windows: Tuple[int, ...]
+
