@@ -621,3 +621,92 @@ class ETZSnapshotCreateRequest(BaseModel):
         ge=ETZ_MIN_RISK_SCORE,
         le=ETZ_MAX_RISK_SCORE,
     )
+    comment: Optional[str] = None
+    captured_at: Optional[datetime] = None
+
+
+@ETZ_APP.post(
+    "/institutions/{inst_id}/snapshots",
+    response_model=ETZSnapshot,
+    status_code=201,
+)
+def etz_add_snapshot(
+    inst_id: str,
+    body: ETZSnapshotCreateRequest,
+    store: ETZStore = Depends(get_etz_store),
+) -> ETZSnapshot:
+    try:
+        store.get_institution(inst_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    snapshot = ETZSnapshot(
+        institution_id=inst_id,
+        captured_at=body.captured_at or datetime.now(ETZ_TIMEZONE),
+        exposure_notional=body.exposure_notional,
+        net_notional=body.net_notional,
+        daily_pnl=body.daily_pnl,
+        liquidity_ratio=body.liquidity_ratio,
+        leverage_ratio=body.leverage_ratio,
+        risk_score_override=body.risk_score_override,
+        comment=body.comment,
+    )
+
+    try:
+        created = store.add_snapshot(snapshot)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    return created
+
+
+@ETZ_APP.get(
+    "/institutions/{inst_id}/snapshots",
+    response_model=List[ETZSnapshot],
+)
+def etz_get_snapshots(
+    inst_id: str,
+    start: Optional[datetime] = Query(None),
+    end: Optional[datetime] = Query(None),
+    store: ETZStore = Depends(get_etz_store),
+) -> List[ETZSnapshot]:
+    try:
+        store.get_institution(inst_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    snapshots = store.list_snapshots(inst_id, start=start, end=end)
+    return snapshots
+
+
+@ETZ_APP.get(
+    "/institutions/{inst_id}/aggregates",
+    response_model=ETZInstitutionWithAggregates,
+)
+def etz_get_institution_aggregates(
+    inst_id: str,
+    windows_minutes: Optional[List[int]] = Query(
+        None,
+        description="Rolling windows in minutes; defaults to predefined set.",
+    ),
+    store: ETZStore = Depends(get_etz_store),
+) -> ETZInstitutionWithAggregates:
+    try:
+        inst = store.get_institution(inst_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if windows_minutes is None or len(windows_minutes) == 0:
+        windows = ETZ_DEFAULT_ROLLING_WINDOWS_MINUTES
+    else:
+        windows = tuple(sorted(set(int(w) for w in windows_minutes)))
+    aggs = store.aggregate_for_windows(inst_id, windows)
+    return ETZInstitutionWithAggregates(institution=inst, windows=aggs)
+
+
+# -----------------------------------------------------------------------------
+# CLI helpers
+# -----------------------------------------------------------------------------
+
+
+def etz_pretty_print_institution(inst: ETZInstitution) -> None:
+    """Print an institution to stdout in a compact single-line format."""
+
