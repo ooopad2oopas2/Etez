@@ -532,3 +532,92 @@ def etz_health(store: ETZStore = Depends(get_etz_store)) -> ETZHealthStatus:
 
 
 @ETZ_APP.get("/config", response_model=ETZConfigSnapshot)
+def etz_config() -> ETZConfigSnapshot:
+    return ETZConfigSnapshot(
+        app_name=ETZ_APP_NAME,
+        version=ETZ_APP_VERSION,
+        default_host=ETZ_DEFAULT_HOST,
+        default_port=ETZ_DEFAULT_PORT,
+        max_snapshots_per_institution=ETZ_MAX_SNAPSHOTS_PER_INSTITUTION,
+        default_windows=ETZ_DEFAULT_ROLLING_WINDOWS_MINUTES,
+    )
+
+
+# -- Institution routes --------------------------------------------------------
+
+
+class ETZInstitutionCreateRequest(BaseModel):
+    legal_name: str
+    short_name: str
+    region: ETZRegion = ETZRegion.GLOBAL
+    base_currency: str = "USD"
+    risk_score: int = 10
+    website: Optional[HttpUrl] = None
+    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+
+@ETZ_APP.post("/institutions", response_model=ETZInstitution, status_code=201)
+def etz_create_institution(
+    body: ETZInstitutionCreateRequest,
+    store: ETZStore = Depends(get_etz_store),
+) -> ETZInstitution:
+    inst = ETZInstitution(
+        legal_name=body.legal_name,
+        short_name=body.short_name,
+        region=body.region,
+        base_currency=body.base_currency,
+        risk_score=body.risk_score,
+        website=body.website,
+        metadata=body.metadata,
+    )
+    try:
+        created = store.create_institution(inst)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return created
+
+
+@ETZ_APP.get("/institutions", response_model=List[ETZInstitution])
+def etz_list_institutions(
+    active_only: bool = Query(True, description="Filter to active institutions only"),
+    store: ETZStore = Depends(get_etz_store),
+) -> List[ETZInstitution]:
+    return store.list_institutions(active_only=active_only)
+
+
+@ETZ_APP.get("/institutions/{inst_id}", response_model=ETZInstitution)
+def etz_get_institution(
+    inst_id: str,
+    store: ETZStore = Depends(get_etz_store),
+) -> ETZInstitution:
+    try:
+        return store.get_institution(inst_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+@ETZ_APP.post("/institutions/{inst_id}/deactivate", response_model=ETZInstitution)
+def etz_deactivate_institution(
+    inst_id: str,
+    store: ETZStore = Depends(get_etz_store),
+) -> ETZInstitution:
+    try:
+        return store.deactivate_institution(inst_id)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+
+# -- Snapshot routes -----------------------------------------------------------
+
+
+class ETZSnapshotCreateRequest(BaseModel):
+    exposure_notional: float
+    net_notional: float
+    daily_pnl: float
+    liquidity_ratio: float
+    leverage_ratio: float
+    risk_score_override: Optional[int] = Field(
+        default=None,
+        ge=ETZ_MIN_RISK_SCORE,
+        le=ETZ_MAX_RISK_SCORE,
+    )
