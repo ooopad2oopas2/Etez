@@ -888,3 +888,92 @@ def etz_build_arg_parser() -> argparse.ArgumentParser:
         type=int,
         default=ETZ_DEFAULT_PORT,
         help="Port for API server.",
+    )
+    sub = parser.add_subparsers(dest="cmd", help="Subcommands")
+
+    # run-server ---------------------------------------------------------------
+    p_run = sub.add_parser("run-server", help="Start FastAPI server with uvicorn.")
+    p_run.set_defaults(cmd_handler="run-server")
+
+    # demo-setup ---------------------------------------------------------------
+    p_demo = sub.add_parser("demo-setup", help="Populate in-memory store with demo data.")
+    p_demo.set_defaults(cmd_handler="demo-setup")
+
+    # create-inst --------------------------------------------------------------
+    p_create = sub.add_parser("create-institution", help="Create a new institution.")
+    p_create.add_argument("--legal-name", required=True)
+    p_create.add_argument("--short-name", required=True)
+    p_create.add_argument(
+        "--region",
+        choices=[r.value for r in ETZRegion],
+        default=ETZRegion.GLOBAL.value,
+    )
+    p_create.add_argument("--base-currency", default="USD")
+    p_create.add_argument("--risk-score", type=int, default=10)
+    p_create.add_argument("--website", default=None)
+    p_create.set_defaults(cmd_handler="create-institution")
+
+    # list-insts ---------------------------------------------------------------
+    p_list = sub.add_parser("list-institutions", help="List institutions.")
+    p_list.add_argument(
+        "--include-inactive",
+        action="store_true",
+        help="Include inactive institutions.",
+    )
+    p_list.set_defaults(cmd_handler="list-institutions")
+
+    # add-snapshot -------------------------------------------------------------
+    p_snap = sub.add_parser("add-snapshot", help="Add a snapshot to an institution.")
+    p_snap.add_argument("institution_id")
+    p_snap.add_argument("--exposure", type=float, required=True)
+    p_snap.add_argument("--net", type=float, required=True)
+    p_snap.add_argument("--pnl", type=float, required=True)
+    p_snap.add_argument("--liquidity", type=float, required=True)
+    p_snap.add_argument("--leverage", type=float, required=True)
+    p_snap.add_argument("--risk-override", type=int, default=None)
+    p_snap.add_argument("--comment", default=None)
+    p_snap.set_defaults(cmd_handler="add-snapshot")
+
+    # show-aggregates ----------------------------------------------------------
+    p_agg = sub.add_parser(
+        "show-aggregates",
+        help="Show rolling aggregates for an institution.",
+    )
+    p_agg.add_argument("institution_id")
+    p_agg.add_argument(
+        "--windows",
+        nargs="*",
+        help="Window lengths in minutes; defaults to standard set.",
+    )
+    p_agg.set_defaults(cmd_handler="show-aggregates")
+
+    # export/import ------------------------------------------------------------
+    p_export = sub.add_parser("export-state", help="Export store to JSON.")
+    p_export.add_argument("--path", default=None)
+    p_export.set_defaults(cmd_handler="export-state")
+
+    p_import = sub.add_parser("import-state", help="Import store from JSON.")
+    p_import.add_argument("--path", default=None)
+    p_import.set_defaults(cmd_handler="import-state")
+
+    # demo-all-in-one ----------------------------------------------------------
+    p_demo_all = sub.add_parser(
+        "demo-all",
+        help="Run demo setup and print aggregates for all institutions.",
+    )
+    p_demo_all.set_defaults(cmd_handler="demo-all")
+
+    return parser
+
+
+def etz_cli_handle(args: argparse.Namespace) -> None:
+    store = ETZ_STORE
+    cmd = getattr(args, "cmd_handler", None)
+    if cmd is None:
+        print("No command supplied; use --help for usage.", file=sys.stderr)
+        sys.exit(1)
+
+    if cmd == "run-server":
+        etz_run_server(host=args.host, port=args.port)
+    elif cmd == "demo-setup":
+        etz_cli_demo_setup(store)
