@@ -710,3 +710,92 @@ def etz_get_institution_aggregates(
 def etz_pretty_print_institution(inst: ETZInstitution) -> None:
     """Print an institution to stdout in a compact single-line format."""
 
+    print(
+        f"{inst.id} | {inst.short_name} | {inst.legal_name} | "
+        f"{inst.region.value} | risk={inst.risk_score} ({etz_risk_band_label(inst.risk_score)}) | "
+        f"active={inst.is_active}"
+    )
+
+
+def etz_cli_create_institution(args: argparse.Namespace, store: ETZStore) -> None:
+    inst = ETZInstitution(
+        legal_name=args.legal_name,
+        short_name=args.short_name,
+        region=ETZRegion(args.region),
+        base_currency=args.base_currency,
+        risk_score=args.risk_score,
+        website=args.website,
+        metadata={},
+    )
+    created = store.create_institution(inst)
+    print("Created institution:")
+    etz_pretty_print_institution(created)
+
+
+def etz_cli_list_institutions(args: argparse.Namespace, store: ETZStore) -> None:
+    insts = store.list_institutions(active_only=not args.include_inactive)
+    if not insts:
+        print("No institutions in store.")
+        return
+    for inst in insts:
+        etz_pretty_print_institution(inst)
+
+
+def etz_cli_add_snapshot(args: argparse.Namespace, store: ETZStore) -> None:
+    inst_id = args.institution_id
+    try:
+        store.get_institution(inst_id)
+    except KeyError:
+        print(f"Institution {inst_id} not found", file=sys.stderr)
+        sys.exit(1)
+
+    snapshot = ETZSnapshot(
+        institution_id=inst_id,
+        exposure_notional=args.exposure,
+        net_notional=args.net,
+        daily_pnl=args.pnl,
+        liquidity_ratio=args.liquidity,
+        leverage_ratio=args.leverage,
+        risk_score_override=args.risk_override,
+        comment=args.comment,
+    )
+    store.add_snapshot(snapshot)
+    print("Added snapshot:")
+    print(json.dumps(etz_model_to_dict(snapshot), indent=2))
+
+
+def etz_cli_show_aggregates(args: argparse.Namespace, store: ETZStore) -> None:
+    inst_id = args.institution_id
+    try:
+        inst = store.get_institution(inst_id)
+    except KeyError:
+        print(f"Institution {inst_id} not found", file=sys.stderr)
+        sys.exit(1)
+
+    if args.windows:
+        windows = tuple(sorted(set(int(w) for w in args.windows)))
+    else:
+        windows = ETZ_DEFAULT_ROLLING_WINDOWS_MINUTES
+
+    aggs = store.aggregate_for_windows(inst_id, windows)
+    print("Institution:")
+    etz_pretty_print_institution(inst)
+    print("Aggregates:")
+    for w in aggs:
+        print(
+            f"  window={w.window_minutes}m count={w.count} "
+            f"exp_avg={w.exposure_avg:.2f} exp_max={w.exposure_max:.2f} "
+            f"net_avg={w.net_notional_avg:.2f} pnl_sum={w.pnl_sum:.2f} "
+            f"liq_min={w.liquidity_min:.2f} lev_max={w.leverage_max:.2f} "
+            f"risk_avg={w.risk_score_avg:.2f}"
+        )
+
+
+def etz_cli_export(args: argparse.Namespace, store: ETZStore) -> None:
+    payload = store.export_state()
+    path = args.path or ETZ_DEFAULT_STATE_FILE
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(payload, f, indent=2)
+    print(f"Exported state to {path}")
+
+
