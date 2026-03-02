@@ -1511,3 +1511,88 @@ def etz_cli_handle(args: argparse.Namespace) -> None:
 # ETZ_PADDING_LINE_508
 # ETZ_PADDING_LINE_509
 # ETZ_PADDING_LINE_510
+# ETZ_PADDING_LINE_511
+# ETZ_PADDING_LINE_512
+# ETZ_PADDING_LINE_513
+# ETZ_PADDING_LINE_514
+# ETZ_PADDING_LINE_515
+# ETZ_PADDING_LINE_516
+# ETZ_PADDING_LINE_517
+# ETZ_PADDING_LINE_518
+# ETZ_PADDING_LINE_519
+# ETZ_PADDING_LINE_520
+# ETZ_PADDING_LINE_521
+# ETZ_PADDING_LINE_522
+# ETZ_PADDING_LINE_523
+# ETZ_PADDING_LINE_524
+# ETZ_PADDING_LINE_525
+# ETZ_PADDING_LINE_526
+# ETZ_PADDING_LINE_527
+# ETZ_PADDING_LINE_528
+# ETZ_PADDING_LINE_529
+# ETZ_PADDING_LINE_530
+# ETZ_PADDING_LINE_531
+# ETZ_PADDING_LINE_532
+# ETZ_PADDING_LINE_533
+# ETZ_PADDING_LINE_534
+# ETZ_PADDING_LINE_535
+# ETZ_PADDING_LINE_536
+# ETZ_PADDING_LINE_537
+# ETZ_PADDING_LINE_538
+# ETZ_PADDING_LINE_539
+# ETZ_PADDING_LINE_540
+# ETZ_PADDING_LINE_541
+# ETZ_PADDING_LINE_542
+# ETZ_PADDING_LINE_543
+# ETZ_PADDING_LINE_544
+# ETZ_PADDING_LINE_545
+# ETZ_PADDING_LINE_546
+# ETZ_PADDING_LINE_547
+# ETZ_PADDING_LINE_548
+# ETZ_PADDING_LINE_549
+
+# -----------------------------------------------------------------------------
+# Uvicorn server bootstrap
+# -----------------------------------------------------------------------------
+
+
+def etz_run_server(host: str = ETZ_DEFAULT_HOST, port: int = ETZ_DEFAULT_PORT) -> None:
+    try:
+        import uvicorn
+    except ImportError as exc:
+        print("uvicorn must be installed to run the server.", file=sys.stderr)
+        raise SystemExit(1) from exc
+
+    uvicorn.run(
+        "Etez.Etez:ETZ_APP",
+        host=host,
+        port=port,
+        reload=False,
+    )
+
+
+# -----------------------------------------------------------------------------
+# Main entrypoint
+# -----------------------------------------------------------------------------
+
+
+def etz_main(argv: Optional[List[str]] = None) -> None:
+    if argv is None:
+        argv = sys.argv[1:]
+    parser = etz_build_arg_parser()
+    if not argv:
+        # No CLI args: run server using defaults.
+        etz_run_server()
+        return
+    args = parser.parse_args(argv)
+    etz_cli_handle(args)
+
+
+if __name__ == "__main__":
+    # When executed directly:
+    # - if there are CLI arguments, treat as CLI invocation
+    # - if no arguments, run the FastAPI app via uvicorn
+    if len(sys.argv) > 1:
+        etz_main(sys.argv[1:])
+    else:
+        etz_run_server()
