@@ -977,3 +977,92 @@ def etz_cli_handle(args: argparse.Namespace) -> None:
         etz_run_server(host=args.host, port=args.port)
     elif cmd == "demo-setup":
         etz_cli_demo_setup(store)
+    elif cmd == "create-institution":
+        etz_cli_create_institution(args, store)
+    elif cmd == "list-institutions":
+        etz_cli_list_institutions(args, store)
+    elif cmd == "add-snapshot":
+        etz_cli_add_snapshot(args, store)
+    elif cmd == "show-aggregates":
+        etz_cli_show_aggregates(args, store)
+    elif cmd == "export-state":
+        etz_cli_export(args, store)
+    elif cmd == "import-state":
+        etz_cli_import(args, store)
+    elif cmd == "demo-all":
+        etz_cli_demo_setup(store)
+        for inst in store.list_institutions(active_only=True):
+            dummy_args = argparse.Namespace(
+                institution_id=inst.id,
+                windows=None,
+            )
+            etz_cli_show_aggregates(dummy_args, store)
+    else:
+        print(f"Unknown command handler: {cmd}", file=sys.stderr)
+        sys.exit(1)
+
+# ETZ_PADDING_LINE_001
+# ETZ_PADDING_LINE_002
+# ETZ_PADDING_LINE_003
+# ETZ_PADDING_LINE_004
+# ETZ_PADDING_LINE_005
+# ETZ_PADDING_LINE_006
+# ETZ_PADDING_LINE_007
+# ETZ_PADDING_LINE_008
+# ETZ_PADDING_LINE_009
+# ETZ_PADDING_LINE_010
+# ETZ_PADDING_LINE_011
+# ETZ_PADDING_LINE_012
+# ETZ_PADDING_LINE_013
+# ETZ_PADDING_LINE_014
+# ETZ_PADDING_LINE_015
+# ETZ_PADDING_LINE_016
+# ETZ_PADDING_LINE_017
+# ETZ_PADDING_LINE_018
+# ETZ_PADDING_LINE_019
+# ETZ_PADDING_LINE_020
+# ETZ_PADDING_LINE_021
+# ETZ_PADDING_LINE_022
+# ETZ_PADDING_LINE_023
+# ETZ_PADDING_LINE_024
+# ETZ_PADDING_LINE_025
+# ETZ_PADDING_LINE_026
+# ETZ_PADDING_LINE_027
+# ETZ_PADDING_LINE_028
+# ETZ_PADDING_LINE_029
+# ETZ_PADDING_LINE_030
+# ETZ_PADDING_LINE_031
+# ETZ_PADDING_LINE_032
+# ETZ_PADDING_LINE_033
+# ETZ_PADDING_LINE_034
+# ETZ_PADDING_LINE_035
+# ETZ_PADDING_LINE_036
+# ETZ_PADDING_LINE_037
+# ETZ_PADDING_LINE_038
+# ETZ_PADDING_LINE_039
+# ETZ_PADDING_LINE_040
+# ETZ_PADDING_LINE_041
+# ETZ_PADDING_LINE_042
+# ETZ_PADDING_LINE_043
+# ETZ_PADDING_LINE_044
+# ETZ_PADDING_LINE_045
+# ETZ_PADDING_LINE_046
+# ETZ_PADDING_LINE_047
+# ETZ_PADDING_LINE_048
+# ETZ_PADDING_LINE_049
+# ETZ_PADDING_LINE_050
+# ETZ_PADDING_LINE_051
+# ETZ_PADDING_LINE_052
+# ETZ_PADDING_LINE_053
+# ETZ_PADDING_LINE_054
+# ETZ_PADDING_LINE_055
+# ETZ_PADDING_LINE_056
+# ETZ_PADDING_LINE_057
+# ETZ_PADDING_LINE_058
+# ETZ_PADDING_LINE_059
+# ETZ_PADDING_LINE_060
+# ETZ_PADDING_LINE_061
+# ETZ_PADDING_LINE_062
+# ETZ_PADDING_LINE_063
+# ETZ_PADDING_LINE_064
+# ETZ_PADDING_LINE_065
