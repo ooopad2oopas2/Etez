@@ -799,3 +799,92 @@ def etz_cli_export(args: argparse.Namespace, store: ETZStore) -> None:
     print(f"Exported state to {path}")
 
 
+def etz_cli_import(args: argparse.Namespace, store: ETZStore) -> None:
+    path = args.path or ETZ_DEFAULT_STATE_FILE
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except OSError as exc:
+        print(f"Failed to read {path}: {exc}", file=sys.stderr)
+        sys.exit(1)
+    store.import_state(payload)
+    print(
+        f"Imported state from {path} "
+        f"(institutions={len(store.institutions)}, snapshots={store.total_snapshot_count()})"
+    )
+
+
+def etz_cli_demo_setup(store: ETZStore) -> None:
+    """Create a mini demo universe of institutions and snapshots."""
+
+    if store.institutions:
+        print("Store already has institutions; skipping demo setup.")
+        return
+
+    demo_insts = [
+        ETZInstitution(
+            legal_name="Aurora Distributed Custody LLC",
+            short_name="AUR_CUST",
+            region=ETZRegion.NA,
+            base_currency="USD",
+            risk_score=18,
+        ),
+        ETZInstitution(
+            legal_name="Helix Prime Fund SPC",
+            short_name="HELIXF",
+            region=ETZRegion.EU,
+            base_currency="EUR",
+            risk_score=41,
+        ),
+        ETZInstitution(
+            legal_name="Zenith Flow Market Maker Ltd",
+            short_name="ZNTH_MM",
+            region=ETZRegion.APAC,
+            base_currency="USD",
+            risk_score=66,
+        ),
+    ]
+
+    for inst in demo_insts:
+        store.create_institution(inst)
+
+    now = datetime.now(ETZ_TIMEZONE)
+    for inst in demo_insts:
+        for i in range(8):
+            offset_minutes = (8 - i) * 30
+            ts = now - timedelta(minutes=offset_minutes)
+            base_exposure = 50_000_000.0 + 5_000_000.0 * i
+            snapshot = ETZSnapshot(
+                institution_id=inst.id,
+                captured_at=ts,
+                exposure_notional=base_exposure,
+                net_notional=base_exposure * (0.1 - 0.02 * i),
+                daily_pnl=250_000.0 * (0.3 - 0.05 * i),
+                liquidity_ratio=max(0.1, 2.5 - 0.2 * i),
+                leverage_ratio=5.0 + 0.6 * i,
+                risk_score_override=None,
+                comment=f"demo-{i}",
+            )
+            store.add_snapshot(snapshot)
+
+    print(
+        f"Created demo institutions={len(store.institutions)} "
+        f"snapshots={store.total_snapshot_count()}"
+    )
+
+
+def etz_build_arg_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(
+        prog=ETZ_APP_NAME,
+        description="Etez institutional trend tracking CLI.",
+    )
+    parser.add_argument(
+        "--host",
+        default=ETZ_DEFAULT_HOST,
+        help="Host interface for API server.",
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=ETZ_DEFAULT_PORT,
+        help="Port for API server.",
